@@ -1,0 +1,29 @@
+name: Publish verified Floatix installer
+on:
+  workflow_dispatch:
+    inputs:
+      download_url:
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download and verify installer
+        env:
+          DOWNLOAD_URL: ${{ inputs.download_url }}
+        run: |
+          curl --fail --location --retry 3 --max-time 300 "$DOWNLOAD_URL" --output Floatix-2.2.0-Setup.exe
+          printf '%s  %s\n' '837f0cddcbc536579ac4fd811dfb6da365130c75b32b59e6684625df9186a6ac' 'Floatix-2.2.0-Setup.exe' > Floatix-2.2.0-Setup.sha256
+          sha256sum --check Floatix-2.2.0-Setup.sha256
+      - name: Publish public release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release upload v2.2.0 Floatix-2.2.0-Setup.exe Floatix-2.2.0-Setup.sha256 --clobber
+          release_id=$(gh api "repos/$GH_REPO/releases" --jq '.[] | select(.tag_name == "v2.2.0") | .id')
+          gh api --method PATCH "repos/$GH_REPO/releases/$release_id" -F draft=false -f make_latest=true
