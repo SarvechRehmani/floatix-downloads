@@ -1,0 +1,26 @@
+name: Publish Floatix 2.2.1 verified parts
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Reconstruct and verify the tested installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release download v2.2.1 --pattern 'floatix-221.part*'
+          cat floatix-221.part* > update.bsdiff
+          echo '5ca48f7bdc1a18cb62ecfabb2d9bdfce8af12207b3a4a0f086bae918f78a2294  update.bsdiff' | sha256sum --check
+          mv update.bsdiff Floatix-2.2.1-Setup.exe
+          echo '5ca48f7bdc1a18cb62ecfabb2d9bdfce8af12207b3a4a0f086bae918f78a2294  Floatix-2.2.1-Setup.exe' > Floatix-2.2.1-Setup.sha256
+          sha256sum --check Floatix-2.2.1-Setup.sha256
+          gh release upload v2.2.1 Floatix-2.2.1-Setup.exe Floatix-2.2.1-Setup.sha256 --clobber
+          release_id=$(gh api "repos/$GH_REPO/releases" --jq '.[] | select(.tag_name == "v2.2.1") | .id')
+          gh api --method PATCH "repos/$GH_REPO/releases/$release_id" -F draft=false -f make_latest=true
+          gh api "repos/$GH_REPO/releases/$release_id/assets" --jq '.[] | select(.name | startswith("floatix-221.part")) | .id' | while read asset_id; do
+            gh api --method DELETE "repos/$GH_REPO/releases/assets/$asset_id"
+          done
