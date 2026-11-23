@@ -1,0 +1,33 @@
+name: Verify public Floatix 2.2.1 download
+on: workflow_dispatch
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify anonymous installer download
+        run: |
+          curl --fail --silent --show-error --location --retry 3 --max-time 180 'https://github.com/SarvechRehmani/floatix-downloads/releases/download/v2.2.1/Floatix-2.2.1-Setup.exe' --output Floatix-2.2.1-Setup.exe
+          echo '5ca48f7bdc1a18cb62ecfabb2d9bdfce8af12207b3a4a0f086bae918f78a2294  Floatix-2.2.1-Setup.exe' | sha256sum --check
+      - name: Verify live website and database health
+        shell: python
+        run: |
+          import json,time,urllib.request
+          base='https://floatix-browser.netlify.app'
+          url='https://github.com/SarvechRehmani/floatix-downloads/releases/download/v2.2.1/Floatix-2.2.1-Setup.exe'
+          for attempt in range(30):
+              suffix='?release=2.2.1&t='+str(time.time())
+              with urllib.request.urlopen(base+'/version.json'+suffix,timeout=25) as r:
+                  version=json.load(r)
+              with urllib.request.urlopen(base+'/'+suffix,timeout=25) as r:
+                  html=r.read().decode()
+              if version['latest_version']=='2.2.1' and version['download_url']==url and url in html and 'VERSION 2.2.1' in html:
+                  break
+              time.sleep(5)
+          else:
+              raise RuntimeError('Website deployment did not match release')
+          assert version['sha256']=='5ca48f7bdc1a18cb62ecfabb2d9bdfce8af12207b3a4a0f086bae918f78a2294'
+          with urllib.request.urlopen(base+'/.netlify/functions/database-health',timeout=25) as r:
+              assert json.load(r)=={'ok':True}
+          print('Public installer checksum, live website version and database health verified.')
